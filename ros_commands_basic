@@ -1,0 +1,304 @@
+#ROS Basics
+## ROS Commands
+
+### LIST NODES
+
+>rosnode list
+>node 1
+>node ...
+>node n
+
+### LIST TOPICS
+>rostopics list
+>topic 1
+>topic 2
+>topic 3
+
+### TOPIC INFO
+>rostopic info <topic>
+
+>Publishers
+ publisher info
+
+>Subscribers
+ subscriber info
+
+
+
+### PRINT TOPIC MESSAGE
+
+>rostopic echo <topic_name>
+
+## CATKIN
+
+Directory where projects are built, modified and installed
+
+Each project becomes a package
+
+### Create Catkin workspace
+mkdir -p ~/catkin_ws/src
+cd ~/catkin_ws/src
+catkin_init_workspace
+cd ~/catkin_ws
+catkin_make
+
+## Ros Launch
+
+### Verify dependencies
+
+1) load workspace source
+source ~/catkin_ws/devel/setup.sh
+rosdep check <package_name>
+rosdep install -i simple_arm
+
+roslaunch simple_arm robot_spawn.launch 
+
+## ROS PUBLISHERS
+Publishers allow a node to send messages to a topic, so that data from the node can be used in other parts of the ROS system. In Python, ROS publishers typically have the following definition format, although other parameters and arguments are possible:
+
+pub1 = rospy.Publisher("/topic_name", message_type, queue_size=size)
+
+Synchronous publishing means that a publisher will attempt to publish to a topic but may be blocked if that topic is being published to by a different publisher. In this situation, the second publisher is blocked until the first publisher has serialized all messages to a buffer and the buffer has written the messages to each of the topic's subscribers. This is the default behavior of a rospy.Publisher if the queue_size parameter is not used or set to None.
+Asynchronous publishing means that a publisher can store messages in a queue until the messages can be sent. If the number of messages published exceeds the size of the queue, the oldest messages are dropped. The queue size can be set using the queue_size parameter.
+
+Finally to publish:
+```
+pub1.publish(message)
+```
+Depending on the frequency of the messages the queue size may be adusted, for example a queue size of two is suittable for messages at 1/10s with std.dev of 1/20 sampled at 10h
+
+## ROS SERVICES
+Defining services
+A ROS service allows request/response communication to exist between nodes. Within the node providing the service, request messages are handled by functions or methods. Once the requests have been handled successfully, the node providing the service sends a message back to the requester node. In Python, a ROS service can be created using the following definition format:
+```
+service = rospy.Service('service_name', serviceClassName, handler)
+				                |
+				                |----> Name for the service
+```
+Service Class name -> Comes from the file name, defined with '.srv' extension
+
+Using Services
+Services can be called directly from the command line, and you will see an example of this in the upcoming arm_mover classroom concepts.
+
+On the other hand, to use a ROS service from within another node, you will define a ServiceProxy, which provides the interface for sending messages to the service:
+
+```
+service_proxy = rospy.ServiceProxy('service_name', serviceClassName)
+```
+One way the ServiceProxy can then be used to send requests is as follows:
+
+```
+msg = serviceClassNameResponse()
+#update msg attributes here to have correct data
+response = service_proxy(msg) 
+```
+
+We still need to cover:
+
+* Custom message generation
+* Services
+* Parameters
+* Launch Files
+* Subscribers
+* Logging
+
+Service definitions always contain two sections, separated by a ‘---’ line. The first section is the definition of the request message. Here, a request consists of two float64 fields, one for each of simple_arm’s joints. The second section contains is the service response. The response contains only a single field, time_elapsed. The time_elapsed field is of type duration, and is responsible for indicating how long it took the arm to perform the movement.
+
+Note: Defining a custom message type is very similar, with the only differences being that message definitions live within the msg directory of the package root, have a “.msg” extension, rather than .srv, and do not contain the “---” section divider. You can find more detailed information on creating messages and services here, and here, respectively.
+
+###Creating a new service definition
+As you learned earlier, an interaction with a service consists of two messages being passed. A request passed to the service, and a response received from the service. The definitions of the request and response message type are contained within .srv files living in the srv directory under the package’s root.
+
+Let’s define a new service for simple_arm. We shall call it GoToPosition.
+
+$ cd ~/catkin_ws/src/simple_arm/
+$ mkdir srv
+$ cd srv
+$ touch GoToPosition.srv
+You should now edit GoToPosition.srv, so it contains the following:
+
+float64 joint_1
+float64 joint_2
+---
+duration time_elapsed
+
+
+### Modifying CMakeLists.txt
+In order for catkin to generate the python modules or C++ libraries which allow you to utilize messages in your code you must first modify simple_arm’s CMakeLists.txt (~/catkin_ws/src/simple_arm/CMakeLists.txt).
+
+CMake is the build tool underlying catkin, and CMakeLists.txt is nothing more than a CMake script used by catkin. If you’re familiar with GNU make, and the concept of makefiles, this is a similar concept.
+
+First, ensure that the find_package() macro lists std_msgs and message_generation as required packages. The find_package() macro should look as follows:
+
+```
+find_package(catkin REQUIRED COMPONENTS
+        std_msgs
+        message_generation
+)
+```
+
+Next, uncomment the commented-out add_service_files() macro so it looks like this:
+
+
+
+
+```
+# Generate services in the 'srv' folder
+add_service_files(
+   FILES
+   GoToPosition.srv
+)
+```
+This tells catkin which files to generate code for.
+
+Lastly, make sure that the generate_messages() macro is uncommented, as follows:
+
+```
+generate_messages(
+   DEPENDENCIES
+   std_msgs  # Or other packages containing msgs
+)
+```
+
+It is this macro that is actually responsible for generating the code. For more information about CMakeLists.txt check out this page on the ROS wiki.
+
+
+### Modifying package.xml
+
+Now that the CMakeLists.txt file has been covered, you should technically be able to build the project. However, there’s one more file which needs to be modified, package.xml.
+
+package.xml is responsible for defining many of the package’s properties, such as the name of the package, version numbers, authors, maintainers, and dependencies.
+
+Right now, we’re worried about the dependencies. In the previous lesson you learned about build-time dependencies and run-time package dependencies. When rosdep is searching for these dependencies, it’s the package.xml file that is being parsed. Let’s add the message_generation and message_runtime dependencies.
+
+```
+  <buildtool_depend>catkin</buildtool_depend>
+  <build_depend>message_generation</build_depend>
+
+  <run_depend>controller_manager</run_depend>
+  <run_depend>effort_controllers</run_depend>
+  <run_depend>gazebo_plugins</run_depend>
+  <run_depend>gazebo_ros</run_depend>
+  <run_depend>gazebo_ros_control</run_depend>
+  <run_depend>joint_state_controller</run_depend>
+  <run_depend>joint_state_publisher</run_depend>
+  <run_depend>robot_state_publisher</run_depend>
+  <run_depend>message_runtime</run_depend>
+  <run_depend>xacro</run_depend>
+
+
+```
+
+### Build the Package
+If you build the workspace successfully, you should now find that a python package containing a module for the new service GoToPosition has been created deep down in the devel directory.
+
+$ cd ~/catkin_ws
+$ catkin_make
+$ cd devel/lib/python2.7/dist-packages
+$ ls
+After sourcing the newly created setup.bash, the new simple_arm package has now become part of your PYTHONPATH environment variable, and is ready for use!
+
+$ env | grep PYTHONPATH
+
+### Launching the project with the new service
+```
+roslauch "<package_name> <laucher>"
+
+# Testsing Service
+source devel/setup.bash
+
+rosservice call "<service_name> <parameters>"
+```
+## ROS Subscribers
+
+A Subscriber enables your node to read messages from a topic, allowing useful data to be streamed into to the node. In Python, ROS subscribers frequently have the following format, although other parameters and arguments are possible:
+```
+sub1 = rospy.Subscriber("/topic_name", message_type, callback_function)
+```
+The "/topic_name" indicates which topic the Subscriber should listen to.
+
+The message_type is the type of message being published on "/topic_name".
+
+###Creating the empty look_away node script
+Just as before when you created the arm_mover and simple_mover nodes, you can create the look_away node as follows:
+
+$ cd ~/catkin_ws
+$ cd src/simple_arm/scripts
+$ touch look_away
+$ chmod u+x look_away
+Let's have a look at the code for look_away.
+
+###Updating the launch file
+Just as you did with the arm_mover node, to get look_away to launch with the rest of the nodes, you will need to modify robot_spawn.launch, which can be found in ~/catkin_ws/src/simple_arm/launch. You can add the following code there:
+
+  <!-- The look away node -->
+  <node name="look_away" type="look_away" pkg="simple_arm"/>
+
+
+## Logging overview
+```
+rospy.logwarn('j1 is out of bounds, valid range (%s,%s), clamping to: %s', 
+               min_j1, max_j1, clamped_j1)
+```
+and
+```
+rospy.loginfo('GoToPositionRequest Received - j1:%s, j2:%s', 
+               req.joint_1, req.joint_2)
+```
+Logging statements allow ROS nodes to send messages to a log file or the console. This allows errors and warnings to be surfaced to the user, or log data to be used later for debugging.
+
+By default all logging messages for a node are written to the node's log file which can be found in ~/.ros/log or ROS_ROOT/log . If roscore is running, you can use roscd to find log file directory by opening a new terminal window and typing:
+
+```
+roscd log
+```
+In this directory, you should see directories from runs of your ROS code, along with a latest directory with log files from the most recent run.
+
+Below, we'll show some of the options available for logging different types of messages, filtering messages, and changing how messages are surfaced to a user.
+
+Logging levels and outputs
+Rospy has several message levels and provides a variety of options for how to display or store these messages:
+
+```
+rospy.logdebug(...)
+rospy.loginfo(...)
+rospy.logwarn(...)
+rospy.logerr(...)
+rospy.logfatal(...)
+```
+
+All levels of logging messages are recorded in ROS log files, but some message levels may also be sent to Python stdout, Python stderr, or the ROS topic /rosout.
+
+The loginfo messages are written to Python's stdout, while logwarn, logerr, and logfatal are written to Python's stderr by default. Additionally, loginfo, logwarn, logerr, and logfatal are written to /rosout.
+
+The following table summarizes the default locations log messages are written to (source here):
+
+||Debug|Info|Warn|Error|Fatal|
+|----|----|----|----|-----|---|
+|stdout| | X |	|			|
+stderr|		|	|X|	X|	X|
+log file|	X|	X|	X|	X|	X|
+/rosout|		|X|	X|	X|	X|
+
+###Modifying message level sent to /rosout
+Although logdebug messages are not written to /rosout by default, it is possible to modify the level of logging messages written to /rosout to display them there, or change the level of logging messages written to /rosout to be more restrictive. To do this you must set the log_level attribute within the rospy.init_node code. For example, if you'd like to allow lodebug messages to be written to /rosout, that can be done as follows:
+
+rospy.init_node('my_node', log_level=rospy.DEBUG)
+Other possible rospy options for log_level are INFO, WARN, ERROR, and FATAL.
+
+###Modifying display of messages sent to stdout and stderr
+It is also possible to change how messages to stdout and stderr are displayed or logged. Within a package's .launch file, the output attribute for a node tag can be set to "screen" or "log". The following table summarizes how the different output options change the display of the node's stdout and stderr messages:
+
+stdout	stderr
+"screen"	screen	screen
+"log"	log	screen and log
+For example, setting output="screen" for the look_away node in robot_spawn.launch will display both stdout and stderr messages in the screen:
+
+```
+ <!-- The look away node -->
+  <node name="look_away" type="look_away" pkg="simple_arm" output="screen"/>
+ ```
+
+If the output attribute is left empty, the default is "log".
+As you continue on with the project, the ROS systems that you write will become increasingly complex. Being able to use logging effectively may prove extremely useful for debugging!
+	
