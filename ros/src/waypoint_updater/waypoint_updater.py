@@ -27,14 +27,21 @@ LOOKAHEAD_WPS = 200 # Number of waypoints we will publish. You can change this n
 class WaypointUpdater(object):
     def __init__(self):
         rospy.init_node('waypoint_updater')
+        self.base_waypoints = None
+        self.target_velocity = None
+        self.current_pose = None
+        self.current_pose_position = None
+        self.current_pose_orientation = None
+        self.final_topic = None
+        self.pub = rospy.Publisher('/final_topic', Lane, queue_size=1, latch=True)
 
         rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
         rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
 
         # TODO: Add a subscriber for /traffic_waypoint and /obstacle_waypoint below
+        #rospy.Subscriber("/traffic_waypoint", Waypoint, self.traffic_cb)
+        #rospy.Subscriber("/obstacle_waypoint", Waypoint, self.obstacle_cb)
 
-
-        self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
 
         # TODO: Add other member variables you need below
 
@@ -42,11 +49,41 @@ class WaypointUpdater(object):
 
     def pose_cb(self, msg):
         # TODO: Implement
-        pass
+        self.current_pose = msg
 
     def waypoints_cb(self, waypoints):
         # TODO: Implement
-        pass
+        rospy.loginfo("Receiving waypoints - %s" % type(waypoints))
+        self.base_waypoints = waypoints.waypoints
+
+        def _get_distance_from_pose(pose, wpt):
+            return math.sqrt((pose.x-wpt.x)**2 + (pose.y-wpt.y)**2 + \
+            (pose.z-wpt.z)**2)
+
+        # Define which waypoint ego car is located
+        start_idx = 0
+        ego_position = self.current_pose.pose.position
+        wpt_of_interest = self.base_waypoints[start_idx].pose.pose.position
+        eval_dist = _get_distance_from_pose(ego_position, wpt_of_interest)
+        for i in range(1, len(waypoints.waypoints)):
+            wpt_of_interest = self.base_waypoints[i].pose.pose.position
+            wpt_dist = _get_distance_from_pose(ego_position, wpt_of_interest)
+            #rospy.loginfo("Calculate dist for entry %d, %f" %(i, wpt_dist))
+            if(wpt_dist <= eval_dist):
+                #rospy.loginfo("New shortest point found %d" %(i))
+                eval_dist = wpt_dist
+                start_idx = i
+
+        self.final_topic = self.base_waypoints[start_idx:start_idx+LOOKAHEAD_WPS]
+
+        # Publish limited set of waypoints
+        lane = Lane()
+        lane.header.frame_id = '/world'
+        lane.header.stamp = rospy.Time(0)
+        lane.waypoints = self.final_topic
+        rospy.loginfo("Waypoints published to final_topic")
+        self.pub.publish(lane)
+
 
     def traffic_cb(self, msg):
         # TODO: Callback for /traffic_waypoint message. Implement
@@ -63,8 +100,11 @@ class WaypointUpdater(object):
         waypoints[waypoint].twist.twist.linear.x = velocity
 
     def distance(self, waypoints, wp1, wp2):
+        # Calculate distance between two points. Usefull for distance between
+        # non straight lines.
+
         dist = 0
-        dl = lambda a, b: math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2  + (a.z-b.z)**2)
+        dl = lambda a, b: math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2 + (a.z-b.z)**2)
         for i in range(wp1, wp2+1):
             dist += dl(waypoints[wp1].pose.pose.position, waypoints[i].pose.pose.position)
             wp1 = i

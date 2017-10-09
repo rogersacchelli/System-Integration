@@ -76,6 +76,7 @@ class WaypointLoader(object):
         lane.header.frame_id = '/world'
         lane.header.stamp = rospy.Time(0)
         lane.waypoints = waypoints
+        rospy.loginfo("Waypoints published to base_waypoints: %s" %(type(waypoints)))
         self.pub.publish(lane)
 
 
