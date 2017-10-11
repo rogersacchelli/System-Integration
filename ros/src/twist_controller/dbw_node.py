@@ -7,7 +7,9 @@ from geometry_msgs.msg import TwistStamped
 import math
 
 from twist_controller import Controller
-
+from pid import PID
+from lowpass import LowPassFilter
+from yaw_controller import YawController
 '''
 You can build this node only after you have built (or partially built) the `waypoint_updater` node.
 
@@ -30,6 +32,10 @@ Once you have the proposed throttle, brake, and steer values, publish it on the 
 that we have created in the `__init__` function.
 
 '''
+
+# VARIABLES
+LPF_TAU = 0.96
+LPF_TS = 1
 
 class DBWNode(object):
     def __init__(self):
@@ -54,12 +60,20 @@ class DBWNode(object):
                                          BrakeCmd, queue_size=1)
 
         # TODO: Create `TwistController` object
+
+        # Low Pass Filter will be applied to angular z
+        self.low_pass_filter = LowPassFilter(LPF_TAU, LPF_TS)
+        self.angular_z = None
+        self.yaw_controller = YawController(wheel_base, steer_ratio*8, min_speed,\
+         max_lat_accel, max_steer_angle)
+
         # self.controller = TwistController()
 
         self.sub_cur_vel = None
         self.throttle = 0.1   #[0 - 1]
         self.brake = 0   #[0 - 1]
         self.steer = 0   #[0 - 1]
+
         self.sub_dbw_enabled = False
         self.sub_twist_cmd = None
 
@@ -90,6 +104,10 @@ class DBWNode(object):
             #                                                     <current linear velocity>,
             #                                                     <dbw status>,
             #                                                     <any other argument you need>)
+
+            self.angular_z = self.low_pass_filter.filt(self.sub_twist_cmd.twist.angular.z) 
+            # Apply angular to Yaw Controller
+
             if self.sub_dbw_enabled:
                self.publish(self.throttle, self.brake, self.steer)
             rate.sleep()
