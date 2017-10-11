@@ -33,7 +33,7 @@ class WaypointUpdater(object):
         self.current_pose_position = None
         self.current_pose_orientation = None
         self.final_topic = None
-        self.pub = rospy.Publisher('/final_topic', Lane, queue_size=1, latch=True)
+        self.pub = rospy.Publisher('/final_waypoints', Lane, queue_size=1, latch=True)
 
         rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
         rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
