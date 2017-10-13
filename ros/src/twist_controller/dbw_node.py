@@ -7,9 +7,6 @@ from geometry_msgs.msg import TwistStamped
 import math
 
 from twist_controller import Controller
-from pid import PID
-from lowpass import LowPassFilter
-from yaw_controller import YawController
 '''
 You can build this node only after you have built (or partially built) the `waypoint_updater` node.
 
@@ -33,9 +30,6 @@ that we have created in the `__init__` function.
 
 '''
 
-# VARIABLES
-LPF_TAU = 0.96
-LPF_TS = 1
 
 class DBWNode(object):
     def __init__(self):
@@ -60,39 +54,41 @@ class DBWNode(object):
                                          BrakeCmd, queue_size=1)
 
         # TODO: Create `TwistController` object
+        self.controller = Controller(wheel_base, steer_ratio, max_lat_accel,
+                                        max_steer_angle)
 
-        # Low Pass Filter will be applied to angular z
-        self.low_pass_filter = LowPassFilter(LPF_TAU, LPF_TS)
         self.angular_z = None
-        self.yaw_controller = YawController(wheel_base, steer_ratio*8, min_speed,\
-         max_lat_accel, max_steer_angle)
-
-        # self.controller = TwistController()
-
+        self.linear_x  = None
+        self.sub_cur_linear_x = None
         self.sub_cur_vel = None
-        self.throttle = 0.1   #[0 - 1]
+        self.throttle = 0.5   #[0 - 1]
         self.brake = 0   #[0 - 1]
-        self.steer = 0   #[0 - 1]
+        self.steer = 0   #[-1 - 1]
 
         self.sub_dbw_enabled = False
         self.sub_twist_cmd = None
+        self.sub_cur_vel_linear_x = None
 
 
         # TODO: Subscribe to all the topics you need to
         rospy.Subscriber('/current_velocity', TwistStamped, self.current_velocity_cb)
         rospy.Subscriber('/vehicle/dbw_enabled', Bool, self.dbw_cb)
         rospy.Subscriber('/twist_cmd', TwistStamped, self.twist_cb)
-        
+
         self.loop()
 
     def current_velocity_cb(self, msg):
         self.sub_cur_vel = msg
-    
+        self.sub_cur_linear_x = self.sub_cur_vel.twist.linear.x
+
     def dbw_cb(self, msg):
         self.sub_dbw_enabled = msg
-    
+
     def twist_cb(self, msg):
-            self.sub_twist_cmd = msg
+                self.sub_twist_cmd = msg
+                self.linear_x = self.sub_twist_cmd.twist.linear.x
+                self.angular_z = self.sub_twist_cmd.twist.angular.z
+
 
     def loop(self):
         rate = rospy.Rate(50) # 50Hz
@@ -104,13 +100,30 @@ class DBWNode(object):
             #                                                     <current linear velocity>,
             #                                                     <dbw status>,
             #                                                     <any other argument you need>)
+                    #rospy.loginfo("Yaw Angle %s" %self.steer)
+            # Controller
+            throttle = self.throttle
+            brake = self.brake
+            steer = self.steer
 
-            self.angular_z = self.low_pass_filter.filt(self.sub_twist_cmd.twist.angular.z) 
-            # Apply angular to Yaw Controller
+            if self.sub_twist_cmd is not None:
+                if(self.linear_x is not None and self.sub_cur_linear_x is not None):
+
+                    if self.controller is not None:
+                        steer_list = [self.linear_x,
+                                    self.angular_z,
+                                    self.sub_cur_linear_x]
+                        throttle, brake, steer = self.controller.control(throttle,
+                                                        brake,
+                                                        steer_list,
+                                                        self.sub_dbw_enabled)
 
             if self.sub_dbw_enabled:
-               self.publish(self.throttle, self.brake, self.steer)
-            rate.sleep()
+                rospy.loginfo("throttle: %s \t brake: %s \t steer: %s"
+                                %(self.throttle, brake, steer))
+
+                self.publish(0.5, self.brake, steer)
+
 
     def publish(self, throttle, brake, steer):
         tcmd = ThrottleCmd()
