@@ -10,6 +10,7 @@ from light_classification.tl_classifier import TLClassifier
 import tf
 import cv2
 import yaml
+import math
 
 STATE_COUNT_THRESHOLD = 3
 
@@ -60,6 +61,27 @@ class TLDetector(object):
     def traffic_cb(self, msg):
         self.lights = msg.lights
 
+    def get_wpt_index(self, position):
+
+        position_x = position[0]
+        position_y = position[1]
+
+        def _get_distance_from_pose(position, wpt):
+            return math.sqrt((position_x-wpt.x)**2 + (position_y-wpt.y)**2)
+
+        if(self.waypoints is not None):
+            index = 0
+            wpt_of_interest = self.base_waypoints[index].pose.pose.position
+            eval_dist = _get_distance_from_pose(position, wpt_of_interest)
+            for i in range(1, len(self.base_waypoints)):
+                wpt_of_interest = self.base_waypoints[i].pose.pose.position
+                wpt_dist = _get_distance_from_pose(position, wpt_of_interest)
+                if(wpt_dist <= eval_dist):
+                    eval_dist = wpt_dist
+                    index = i
+
+        return index
+
     def image_cb(self, msg):
         """Identifies red lights in the incoming camera image and publishes the index
             of the waypoint closest to the red light's stop line to /traffic_waypoint
@@ -100,8 +122,24 @@ class TLDetector(object):
             int: index of the closest waypoint in self.waypoints
 
         """
-        #TODO implement
-        return 0
+
+        def _get_distance_from_pose(pose, wpt):
+            try:
+                distance = math.sqrt((pose[0]-wpt.x)**2 + (pose[1]-wpt.y)**2)
+            except:
+                distance = math.sqrt((pose.x-wpt.x)**2 + (pose.y-wpt.y)**2)
+
+        index = 0
+        wpt_of_interest = self.waypoints.waypoints[index].pose.pose.position
+        eval_dist = _get_distance_from_pose(pose, wpt_of_interest)
+        for i in range(1, len(self.waypoints.waypoints)):
+            wpt_of_interest = self.waypoints.waypoints[i].pose.pose.position
+            wpt_dist = _get_distance_from_pose(pose, wpt_of_interest)
+            if(wpt_dist <= eval_dist):
+                eval_dist = wpt_dist
+                index = i
+
+        return index
 
 
     def project_to_image_plane(self, point_in_world):
@@ -176,10 +214,15 @@ class TLDetector(object):
 
         # List of positions that correspond to the line to stop in front of for a given intersection
         stop_line_positions = self.config['stop_line_positions']
-        if(self.pose):
-            car_position = self.get_closest_waypoint(self.pose.pose)
+        
+        if(self.pose and self.waypoints):
+            car_position = self.get_closest_waypoint(self.pose.pose.position)
 
         #TODO find the closest visible traffic light (if one exists)
+            tf_index = []
+            for i,tl in enumerate(stop_line_positions):
+                tf_index.append([tl, self.get_closest_waypoint(tl)])
+                rospy.loginfo(tf_index[i])
 
         if light:
             state = self.get_light_state(light)
