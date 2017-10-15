@@ -57,15 +57,19 @@ class DBWNode(object):
         self.controller = Controller(wheel_base, steer_ratio, max_lat_accel,
                                         max_steer_angle)
 
-        self.angular_z = None
-        self.linear_x  = None
+
+        # Controll variables
+        self.throttle = 0   #[0 - 1]
+        self.steer = 0   #[-1 - 1]
+        self.brake_deadband = brake_deadband
+
+        # Status variables
+        self.sub_dbw_enabled = False
         self.sub_cur_linear_x = None
         self.sub_cur_vel = None
-        self.throttle = 0.5   #[0 - 1]
-        self.brake = 0   #[0 - 1]
-        self.steer = 0   #[-1 - 1]
-
-        self.sub_dbw_enabled = False
+        self.angular_z = None
+        self.linear_x  = None   # Also desired_velocity
+        self.desired_velocity = None
         self.sub_twist_cmd = None
         self.sub_cur_vel_linear_x = None
 
@@ -77,21 +81,26 @@ class DBWNode(object):
 
         self.loop()
 
+
     def current_velocity_cb(self, msg):
         self.sub_cur_vel = msg
         self.sub_cur_linear_x = self.sub_cur_vel.twist.linear.x
 
     def dbw_cb(self, msg):
-        self.sub_dbw_enabled = msg
+        self.sub_dbw_enabled = msg.data
+        rospy.loginfo("DBW: %s" %self.sub_dbw_enabled)
+        self.controller.reset_pid()
+
 
     def twist_cb(self, msg):
-                self.sub_twist_cmd = msg
-                self.linear_x = self.sub_twist_cmd.twist.linear.x
-                self.angular_z = self.sub_twist_cmd.twist.angular.z
+        if msg is not None:
+            self.sub_twist_cmd = msg
+            self.linear_x = self.sub_twist_cmd.twist.linear.x
+            self.angular_z = self.sub_twist_cmd.twist.angular.z
 
 
     def loop(self):
-        rate = rospy.Rate(50) # 50Hz
+
         while not rospy.is_shutdown():
             # TODO: Get predicted throttle, brake, and steering using `twist_controller`
             # You should only publish the control commands if dbw is enabled
@@ -102,27 +111,31 @@ class DBWNode(object):
             #                                                     <any other argument you need>)
                     #rospy.loginfo("Yaw Angle %s" %self.steer)
             # Controller
-            throttle = self.throttle
-            brake = self.brake
-            steer = self.steer
+            rate = rospy.Rate(50) # 50Hz
 
-            if self.sub_twist_cmd is not None:
-                if(self.linear_x is not None and self.sub_cur_linear_x is not None):
-
+            if(self.linear_x is not None and self.sub_cur_linear_x is not None):
                     if self.controller is not None:
                         steer_list = [self.linear_x,
                                     self.angular_z,
                                     self.sub_cur_linear_x]
-                        throttle, brake, steer = self.controller.control(throttle,
-                                                        brake,
+
+                        velocity_cte = self.linear_x - self.sub_cur_linear_x
+
+                        throttle, brake, steer = self.controller.control(
+                                                        velocity_cte,
                                                         steer_list,
                                                         self.sub_dbw_enabled)
+                        if brake <= self.brake_deadband:
+                            brake = 0
 
-            if self.sub_dbw_enabled:
-                rospy.loginfo("throttle: %s \t brake: %s \t steer: %s"
-                                %(self.throttle, brake, steer))
+                        if self.sub_dbw_enabled:
+                            rospy.loginfo("throttle:%s|brake:%s|steer:%s|"\
+                                            "velocity:%s|desired_velocity:%s"
+                                %(throttle, brake, steer, self.sub_cur_linear_x,
+                            self.linear_x))
 
-                self.publish(0.5, self.brake, steer)
+                            self.publish(throttle, brake, steer)
+            rate.sleep()
 
 
     def publish(self, throttle, brake, steer):

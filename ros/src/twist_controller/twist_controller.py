@@ -8,15 +8,15 @@ ONE_MPH = 0.44704
 
 # PID CONSTANTS
 
-THROTTLE_KP = 0.1
-THROTTLE_KI = 0.0001
+THROTTLE_KP = 0.4
+THROTTLE_KI = 0.001
 THROTTLE_KD = 4
 
 BREAKING_KP = 0.1
 BREAKING_KI = 0.0001
 BREAKING_KD = 4
 
-PID_RATE = 1./50.
+PID_RATE = 1./20.
 
 # LOW PASS FILTER VARIABLES
 LPF_TAU = 0.96
@@ -43,17 +43,29 @@ class Controller(object):
         if(self.pid_brake is not None and self.pid_throttle is not None):
             rospy.loginfo("PID Initialized")
 
-    def control(self, throttle, brake, steer_list, is_enabled = False):
+    def control(self, velocity_error, steer_list, is_enabled = False):
         # TODO: Change the arg, kwarg list to suit your needs
         # Return throttle, brake, steer
-        if is_enabled:
-            steer = self.yaw_controller.get_steering(steer_list[0],
-                                                steer_list[1],
-                                                steer_list[2])
-            steer = self.lpf_steer.filt(steer)
-            #pid_throttle.step(throttle, PID_RATE)
-        else:
-            self.pid_throttle.reset()
-            self.pid_brake.reset()
-            steer = 0
+        throttle = 0
+        brake = 0
+        steer = 0
+
+        linear_velocity, angular_velocity, current_velocity = steer_list
+        rospy.loginfo("steer: %s|%s|%s" %(linear_velocity, angular_velocity,
+                                            current_velocity))
+
+        angular_velocity = self.lpf_steer.filt(angular_velocity)
+        steer = self.yaw_controller.get_steering(linear_velocity,
+                                            angular_velocity,
+                                            current_velocity)
+
+        throttle = self.pid_throttle.step(velocity_error, PID_RATE)
+        brake = self.pid_brake.step(-velocity_error, PID_RATE)
+
+        rospy.loginfo("controller: %s|%s|%s" %(throttle, brake, steer))
+
         return throttle, brake, steer
+
+    def reset_pid(self):
+        self.pid_throttle.reset()
+        self.pid_brake.reset()

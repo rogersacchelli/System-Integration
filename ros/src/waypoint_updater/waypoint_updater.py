@@ -49,48 +49,48 @@ class WaypointUpdater(object):
     def pose_cb(self, msg):
         # TODO: Implement
         self.current_pose = msg
+        #rospy.loginfo(self.current_pose.pose)
+        self.publish()
 
     def waypoints_cb(self, waypoints):
         # TODO: Implement
-        rospy.loginfo("Receiving waypoints - %s" % type(waypoints))
+        rospy.loginfo("Receiving waypoints from file - %s" % type(waypoints))
         self.base_waypoints = waypoints.waypoints
+        self.publish()
 
-        self.loop()
-
-    def loop(self):
-        #rospy.loginfo("current_pose: %s" %self.current_pose)
+    def publish(self):
 
         def _get_distance_from_pose(pose, wpt):
             return math.sqrt((pose.x-wpt.x)**2 + (pose.y-wpt.y)**2 + \
             (pose.z-wpt.z)**2)
 
-        rate = rospy.Rate(50) # 10Hz
+        #rate = rospy.Rate(10) # 10 Hz
+        if(self.current_pose is not None and self.base_waypoints is not None):
+            start_idx = 0
+            ego_position = self.current_pose.pose.position
+            wpt_of_interest = self.base_waypoints[start_idx].pose.pose.position
+            eval_dist = _get_distance_from_pose(ego_position, wpt_of_interest)
+            for i in range(1, len(self.base_waypoints)):
+                wpt_of_interest = self.base_waypoints[i].pose.pose.position
+                wpt_dist = _get_distance_from_pose(ego_position, wpt_of_interest)
+                #rospy.loginfo("Calculate dist for entry %d, %f" %(i, wpt_dist))
+                if(wpt_dist <= eval_dist):
+                    #rospy.loginfo("New shortest point found %d" %(i))
+                    eval_dist = wpt_dist
+                    start_idx = i
 
-        while not rospy.is_shutdown():
-            # Define which waypoint ego car is located
-            if(self.current_pose is not None):
-                start_idx = 0
-                ego_position = self.current_pose.pose.position
-                wpt_of_interest = self.base_waypoints[start_idx].pose.pose.position
-                eval_dist = _get_distance_from_pose(ego_position, wpt_of_interest)
-                for i in range(1, len(self.base_waypoints)):
-                    wpt_of_interest = self.base_waypoints[i].pose.pose.position
-                    wpt_dist = _get_distance_from_pose(ego_position, wpt_of_interest)
-                    #rospy.loginfo("Calculate dist for entry %d, %f" %(i, wpt_dist))
-                    if(wpt_dist <= eval_dist):
-                        #rospy.loginfo("New shortest point found %d" %(i))
-                        eval_dist = wpt_dist
-                        start_idx = i
+                    self.final_topic = self.base_waypoints[start_idx:start_idx+LOOKAHEAD_WPS]
 
-                self.final_topic = self.base_waypoints[start_idx:start_idx+LOOKAHEAD_WPS]
-
-                # Publish limited set of waypoints
-                lane = Lane()
-                lane.header.frame_id = '/world'
-                lane.header.stamp = rospy.Time(0)
-                lane.waypoints = self.final_topic
-                #rospy.loginfo("Waypoints published to final_topic")
-                self.pub.publish(lane)
+            # Publish limited set of waypoints
+            lane = Lane()
+            lane.header.frame_id = '/world'
+            lane.header.stamp = rospy.Time(0)
+            lane.waypoints = self.final_topic
+            rospy.loginfo("x:%s|y:%s index-> %d "%(ego_position.x,
+                                                    ego_position.y,
+                                                    start_idx))
+            self.pub.publish(lane)
+            #rate.sleep()
 
     def traffic_cb(self, msg):
         # TODO: Callback for /traffic_waypoint message. Implement
