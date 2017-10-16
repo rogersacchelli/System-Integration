@@ -23,6 +23,7 @@ TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 
 LOOKAHEAD_WPS = 200 # Number of waypoints we will publish. You can change this number
 
+DEBUG_POSITION = False
 
 class WaypointUpdater(object):
     def __init__(self):
@@ -86,7 +87,8 @@ class WaypointUpdater(object):
             lane.header.frame_id = '/world'
             lane.header.stamp = rospy.Time(0)
             lane.waypoints = self.final_topic
-            rospy.loginfo("x:%s|y:%s index-> %d "%(ego_position.x,
+            if DEBUG_POSITION:
+                rospy.loginfo("x:%s|y:%s index-> %d "%(ego_position.x,
                                                     ego_position.y,
                                                     start_idx))
             self.pub.publish(lane)

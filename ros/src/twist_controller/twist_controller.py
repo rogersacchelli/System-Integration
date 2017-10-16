@@ -9,21 +9,23 @@ ONE_MPH = 0.44704
 # PID CONSTANTS
 
 THROTTLE_KP = 0.4
-THROTTLE_KI = 0.001
-THROTTLE_KD = 4
+THROTTLE_KI = 0.0001
+THROTTLE_KD = 0.5
 
-BREAKING_KP = 0.1
+BREAKING_KP = 0.4
 BREAKING_KI = 0.0001
-BREAKING_KD = 4
+BREAKING_KD = 0.5
 
 PID_RATE = 1./20.
 
-# LOW PASS FILTER VARIABLES
+# LOW PASS FILTER VARIABLES 
 LPF_TAU = 0.96
 LPF_TS = 1
 
 # Controller Variables
 MIN_SPEED = 1
+
+DEBUG_YAW = False
 
 class Controller(object):
     def __init__(self, wheel_base, steer_ratio, max_lat_accel, max_steer_angle):
@@ -51,7 +53,8 @@ class Controller(object):
         steer = 0
 
         linear_velocity, angular_velocity, current_velocity = steer_list
-        rospy.loginfo("steer: %s|%s|%s" %(linear_velocity, angular_velocity,
+        if DEBUG_YAW:
+            rospy.loginfo("steer: %s|%s|%s" %(linear_velocity, angular_velocity,
                                             current_velocity))
 
         angular_velocity = self.lpf_steer.filt(angular_velocity)
@@ -61,8 +64,6 @@ class Controller(object):
 
         throttle = self.pid_throttle.step(velocity_error, PID_RATE)
         brake = self.pid_brake.step(-velocity_error, PID_RATE)
-
-        rospy.loginfo("controller: %s|%s|%s" %(throttle, brake, steer))
 
         return throttle, brake, steer
 

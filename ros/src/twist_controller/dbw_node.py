@@ -30,6 +30,10 @@ that we have created in the `__init__` function.
 
 '''
 
+DEBUG_CONTROLLER = False
+DEBUG_DBW = False
+DEBUG_CONTROL = False
+
 
 class DBWNode(object):
     def __init__(self):
@@ -125,14 +129,18 @@ class DBWNode(object):
                                                         velocity_cte,
                                                         steer_list,
                                                         self.sub_dbw_enabled)
+                        if DEBUG_CONTROLLER:
+                            rospy.loginfo("controller: %s|%s|%s" %(throttle, brake, steer))
+
                         if brake <= self.brake_deadband:
                             brake = 0
 
                         if self.sub_dbw_enabled:
-                            rospy.loginfo("throttle:%s|brake:%s|steer:%s|"\
-                                            "velocity:%s|desired_velocity:%s"
-                                %(throttle, brake, steer, self.sub_cur_linear_x,
-                            self.linear_x))
+                            if DEBUG_CONTROL:
+                                rospy.loginfo("throttle:%s|brake:%s|steer:%s|"\
+                                                "velocity:%s|desired_velocity:%s"
+                                    %(throttle, brake, steer, self.sub_cur_linear_x,
+                                self.linear_x))
 
                             self.publish(throttle, brake, steer)
             rate.sleep()
