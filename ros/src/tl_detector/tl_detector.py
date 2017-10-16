@@ -16,6 +16,7 @@ STATE_COUNT_THRESHOLD = 3
 
 DEBUG_CLOSEST_WPT = False
 DEBUG_IMAGE = True
+DEBUG_CLASSIFIER = True
 
 class TLDetector(object):
     def __init__(self):
@@ -188,6 +189,11 @@ class TLDetector(object):
         """Finds closest visible traffic light, if one exists, and determines its
             location and color
 
+            UNKNOWN=4
+            GREEN=2
+            YELLOW=1
+            RED=0
+
         Returns:
             int: index of waypoint closes to the upcoming stop line for a traffic light (-1 if none exists)
             int: ID of traffic light color (specified in styx_msgs/TrafficLight)
@@ -218,12 +224,12 @@ class TLDetector(object):
 
         # Evaluate light
         light = self.camera_image
-        if DEBUG_IMAGE:
-            rospy.loginfo("image message type:%s" %type(light))
 
         if light:
             state = self.get_light_state(light)
-            return light_wp, state
+            if DEBUG_IMAGE:
+                rospy.loginfo("state: %s" %state)
+            return closest, state
         self.waypoints = None
         return -1, TrafficLight.UNKNOWN
 
