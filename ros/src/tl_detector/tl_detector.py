@@ -12,9 +12,11 @@ import cv2
 import yaml
 import math
 
-STATE_COUNT_THRESHOLD = 3
+STATE_COUNT_THRESHOLD = 2
+TRAFFIC_LIGHT_WPT_THOLD = 50
 
-DEBUG_CLOSEST_WPT = False
+
+DEBUG_CLOSEST_WPT = True
 DEBUG_IMAGE = True
 DEBUG_CLASSIFIER = True
 
@@ -97,6 +99,8 @@ class TLDetector(object):
             self.upcoming_red_light_pub.publish(Int32(self.last_wp))
         self.state_count += 1
 
+        if DEBUG_CLASSIFIER:
+            rospy.loginfo("red light: %s" %light_wp)
 
     def get_closest_waypoint(self, pose):
         """Identifies the closest path waypoint to the given position

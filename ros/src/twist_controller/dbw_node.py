@@ -30,9 +30,9 @@ that we have created in the `__init__` function.
 
 '''
 
-DEBUG_CONTROLLER = False
+DEBUG_CONTROLLER = True
 DEBUG_DBW = False
-DEBUG_CONTROL = False
+DEBUG_CONTROL = True
 
 
 class DBWNode(object):
@@ -42,8 +42,8 @@ class DBWNode(object):
         vehicle_mass = rospy.get_param('~vehicle_mass', 1736.35)
         fuel_capacity = rospy.get_param('~fuel_capacity', 13.5)
         brake_deadband = rospy.get_param('~brake_deadband', .1)
-        decel_limit = rospy.get_param('~decel_limit', -5)
-        accel_limit = rospy.get_param('~accel_limit', 1.)
+        decel_limit = rospy.get_param('~decel_limit', -3.)
+        accel_limit = rospy.get_param('~accel_limit', 3.)
         wheel_radius = rospy.get_param('~wheel_radius', 0.2413)
         wheel_base = rospy.get_param('~wheel_base', 2.8498)
         steer_ratio = rospy.get_param('~steer_ratio', 14.8)
@@ -132,15 +132,13 @@ class DBWNode(object):
                         if DEBUG_CONTROLLER:
                             rospy.loginfo("controller: %s|%s|%s" %(throttle, brake, steer))
 
-                        if brake <= self.brake_deadband:
-                            brake = 0
+                        #if brake <= self.brake_deadband:
+                        #    brake = 0
 
                         if self.sub_dbw_enabled:
                             if DEBUG_CONTROL:
-                                rospy.loginfo("throttle:%s|brake:%s|steer:%s|"\
-                                                "velocity:%s|desired_velocity:%s"
-                                    %(throttle, brake, steer, self.sub_cur_linear_x,
-                                self.linear_x))
+                                rospy.loginfo("velocity:%s|desired_velocity:%s"
+                                    %(self.sub_cur_linear_x, self.linear_x))
 
                             self.publish(throttle, brake, steer)
             rate.sleep()

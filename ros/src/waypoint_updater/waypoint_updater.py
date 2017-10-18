@@ -24,21 +24,23 @@ TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 '''
 
 LOOKAHEAD_WPS = 200 # Number of waypoints we will publish. You can change this number
-MAX_DECEL = 3
+MAX_DECEL = 1
 
-DEBUG_POSITION = False
+DEBUG_POSITION = True
 DEBUG_TRAFFIC_LIGHT = True
+DEBUG_PUBLISHING = True
 
 class WaypointUpdater(object):
     def __init__(self):
         rospy.init_node('waypoint_updater')
         self.base_waypoints = None
-        self.target_velocity = None
+        self.tl_waypoints = None
         self.current_pose = None
         self.current_pose_position = None
         self.current_pose_orientation = None
         self.final_topic = None
-        self.traffic_lights = None
+        self.traffic_lights_wpt = None
+        self.current_position_idx = None
 
         self.pub = rospy.Publisher('/final_waypoints', Lane, queue_size=1, latch=True)
 
@@ -56,27 +58,37 @@ class WaypointUpdater(object):
     def pose_cb(self, msg):
         # TODO: Implement
         self.current_pose = msg
-        self.publish()
 
     def waypoints_cb(self, waypoints):
         # TODO: Implement
         rospy.loginfo("Receiving waypoints from file - %s" % type(waypoints))
         self.base_waypoints = waypoints.waypoints
-        self.publish()
+
 
     def traffic_cb(self, msg):
         # TODO: Callback for /traffic_waypoint message. Implement
-        if msg is not None:
-            self.traffic_lights = msg
-            if DEBUG_TRAFFIC_LIGHT:
-                rospy.loginfo("TL_Updater: %s" %self.traffic_lights)
+        self.get_look_ahead_waypoints()
+        if msg is not None and self.final_topic is not None:
+            self.traffic_lights_wpt = msg.data
+            if self.traffic_lights_wpt != -1:
+                # Red Sign
+                tl_idx_distance = self.traffic_lights_wpt - self.current_position_idx
+                if tl_idx_distance > 0 and tl_idx_distance < LOOKAHEAD_WPS:
+                    red_light_wpt = self.final_topic[0:tl_idx_distance]
+                    if DEBUG_TRAFFIC_LIGHT:
+                        rospy.loginfo("final_topic length: %s | start_idx: %s | \
+                        end_idx: %s" %(len(red_light_wpt),self.current_position_idx,
+                                            self.traffic_lights_wpt))
+                    red_light_wpt = self.decelerate(red_light_wpt)
+                    self.final_topic[0:tl_idx_distance] = red_light_wpt
+        self.publish()
 
     def obstacle_cb(self, msg):
         # TODO: Callback for /obstacle_waypoint message. We will implement it later
         pass
 
 
-    def publish(self):
+    def get_look_ahead_waypoints(self):
 
         def _get_distance_from_pose(pose, wpt):
             return math.sqrt((pose.x-wpt.x)**2 + (pose.y-wpt.y)**2 + \
@@ -97,17 +109,21 @@ class WaypointUpdater(object):
                     eval_dist = wpt_dist
                     start_idx = i
 
-                    self.final_topic = self.base_waypoints[start_idx:start_idx+LOOKAHEAD_WPS]
+            self.current_position_idx = start_idx
 
+            if DEBUG_POSITION:
+                rospy.loginfo("x:%s|y:%s index-> %d "%(ego_position.x,
+                                                    ego_position.y,
+                                                    start_idx))
+
+            self.final_topic = self.base_waypoints[start_idx:start_idx+LOOKAHEAD_WPS]
+
+    def publish(self):
             # Publish limited set of waypoints
             lane = Lane()
             lane.header.frame_id = '/world'
             lane.header.stamp = rospy.Time(0)
             lane.waypoints = self.final_topic
-            if DEBUG_POSITION:
-                rospy.loginfo("x:%s|y:%s index-> %d "%(ego_position.x,
-                                                    ego_position.y,
-                                                    start_idx))
             self.pub.publish(lane)
             #rate.sleep()
 
@@ -129,6 +145,10 @@ class WaypointUpdater(object):
     def set_waypoint_velocity(self, waypoints, waypoint, velocity):
         waypoints[waypoint].twist.twist.linear.x = velocity
 
+    def distance(self, p1, p2):
+        x, y, z = p1.x - p2.x, p1.y - p2.y, p1.z - p2.z
+        return math.sqrt(x*x + y*y + z*z)
+
     def decelerate(self, waypoints):
         last = waypoints[-1]
         last.twist.twist.linear.x = 0.
@@ -139,17 +159,6 @@ class WaypointUpdater(object):
                 vel = 0.
             wp.twist.twist.linear.x = min(vel, wp.twist.twist.linear.x)
         return waypoints
-
-    def distance(self, waypoints, wp1, wp2):
-        # Calculate distance between two points. Usefull for distance between
-        # non straight lines.
-
-        dist = 0
-        dl = lambda a, b: math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2 + (a.z-b.z)**2)
-        for i in range(wp1, wp2+1):
-            dist += dl(waypoints[wp1].pose.pose.position, waypoints[i].pose.pose.position)
-            wp1 = i
-        return dist
 
 
 if __name__ == '__main__':
