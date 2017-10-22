@@ -7,6 +7,7 @@ from std_msgs.msg import Int32
 
 
 import math
+import copy
 
 '''
 This node will publish waypoints from the car's current position to some `x` distance ahead.
@@ -24,11 +25,13 @@ TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 '''
 
 LOOKAHEAD_WPS = 200 # Number of waypoints we will publish. You can change this number
-MAX_DECEL = 1
+WPT_STOP_MARGIN = 10
+MAX_DECEL = 2
+MAX_ACCEL = 2
 
-DEBUG_POSITION = True
+DEBUG_POSITION = False
 DEBUG_TRAFFIC_LIGHT = True
-DEBUG_PUBLISHING = True
+DEBUG_PUBLISHING = False
 
 class WaypointUpdater(object):
     def __init__(self):
@@ -70,17 +73,27 @@ class WaypointUpdater(object):
         self.get_look_ahead_waypoints()
         if msg is not None and self.final_topic is not None:
             self.traffic_lights_wpt = msg.data
+
+            # Red Sign detected
             if self.traffic_lights_wpt != -1:
-                # Red Sign
+                # lenght of indexes to stop
                 tl_idx_distance = self.traffic_lights_wpt - self.current_position_idx
+
+                # check if there's distance to stop
                 if tl_idx_distance > 0 and tl_idx_distance < LOOKAHEAD_WPS:
                     red_light_wpt = self.final_topic[0:tl_idx_distance]
+
                     if DEBUG_TRAFFIC_LIGHT:
                         rospy.loginfo("final_topic length: %s | start_idx: %s | \
                         end_idx: %s" %(len(red_light_wpt),self.current_position_idx,
                                             self.traffic_lights_wpt))
+
                     red_light_wpt = self.decelerate(red_light_wpt)
                     self.final_topic[0:tl_idx_distance] = red_light_wpt
+            else:
+                # Accelerate if traffic light is not red
+                self.accelerate()
+
         self.publish()
 
     def obstacle_cb(self, msg):
@@ -112,7 +125,7 @@ class WaypointUpdater(object):
             self.current_position_idx = start_idx
 
             if DEBUG_POSITION:
-                rospy.loginfo("x:%s|y:%s index-> %d "%(ego_position.x,
+                rospy.loginfo("x:%s|y:%s idx: %d|"%(ego_position.x,
                                                     ego_position.y,
                                                     start_idx))
 
@@ -149,16 +162,43 @@ class WaypointUpdater(object):
         x, y, z = p1.x - p2.x, p1.y - p2.y, p1.z - p2.z
         return math.sqrt(x*x + y*y + z*z)
 
+    def distance_accum(self, waypoints, wp1, wp2):
+        """
+        accumulate distance over two waypoints
+        """
+        dist = 0
+        dl = lambda a, b: math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2  + (a.z-b.z)**2)
+        for i in range(wp1, wp2+1):
+            dist += dl(waypoints[wp1].pose.pose.position, waypoints[i].pose.pose.position)
+            wp1 = i
+        return dist
+
     def decelerate(self, waypoints):
-        last = waypoints[-1]
-        last.twist.twist.linear.x = 0.
-        for wp in waypoints[:-1][::-1]:
+        if len(waypoints) < WPT_STOP_MARGIN:
+            wpt_margin = len(waypoints)
+        else:
+            wpt_margin = WPT_STOP_MARGIN
+
+        print wpt_margin
+        for i in range(1, wpt_margin+1):
+            last = waypoints[-i]
+            last.twist.twist.linear.x = 0.
+
+        for wp in waypoints[:-wpt_margin][::-1]:
             dist = self.distance(wp.pose.pose.position, last.pose.pose.position)
             vel = math.sqrt(2 * MAX_DECEL * dist)
-            if vel < 1.:
+            if vel < .1:
                 vel = 0.
             wp.twist.twist.linear.x = min(vel, wp.twist.twist.linear.x)
         return waypoints
+
+    def accelerate(self):
+        for i in range(LOOKAHEAD_WPS-1):
+            dist = self.distance(self.final_topic[0].pose.pose.position,self.final_topic[i+1].pose.pose.position)
+            vel = math.sqrt(2 * MAX_ACCEL * dist)
+            if vel > 11.:
+                vel = 11.
+            self.final_topic[i].twist.twist.linear.x = max(vel, self.final_topic[i].twist.twist.linear.x)
 
 
 if __name__ == '__main__':

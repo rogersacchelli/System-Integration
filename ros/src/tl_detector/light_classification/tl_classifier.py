@@ -12,8 +12,9 @@ from io import StringIO
 from utilities import label_map_util
 from utilities import visualization_utils as vis_util
 
-MINIMUM_CONFIDENCE = 0.05
-DEBUG_CLASSIFIER = True
+MINIMUM_CONFIDENCE_RED = 0.05
+MINIMUM_CONFIDENCE_GREEN = 0.40
+DEBUG_CLASSIFIER = False
 
 class TLClassifier(object):
     def __init__(self, *args):
@@ -98,8 +99,12 @@ class TLClassifier(object):
         # left/right arrows etc. Here we are only looking for
         # standard red, yellow and green light and ignore others.
         for i in range(boxes.shape[0]):
-            if scores[i] >= MINIMUM_CONFIDENCE:
-                classname = self.category_index[classes[i]]['name']
+            classname = self.category_index[classes[i]]['name']
+            if classname == 'Green':
+                min_confidence = MINIMUM_CONFIDENCE_GREEN
+            else:
+                min_confidence  = MINIMUM_CONFIDENCE_RED
+            if scores[i] >= min_confidence:
                 if DEBUG_CLASSIFIER:
                     rospy.loginfo("class:%s - score:%s" %(classname, scores[i]))
 
