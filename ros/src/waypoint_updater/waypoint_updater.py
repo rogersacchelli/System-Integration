@@ -27,7 +27,7 @@ TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 LOOKAHEAD_WPS = 200 # Number of waypoints we will publish. You can change this number
 WPT_STOP_MARGIN = 10
 MAX_DECEL = 2
-MAX_ACCEL = 2
+MAX_ACCEL = 5
 
 DEBUG_POSITION = False
 DEBUG_TRAFFIC_LIGHT = True
